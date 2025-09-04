@@ -1,3 +1,5 @@
+import os
+os.environ["CHROMA_DB_IMPL"] = "duckdb"
 import streamlit as st
 import google.generativeai as genai
 from langchain_community.document_loaders import PyPDFLoader
@@ -56,5 +58,6 @@ if query:
     rag_chain = create_retrieval_chain(retriever,question_answer_chain)
 
     respones = rag_chain.invoke({'input':query})
+
 
     st.write(respones['answer'])
