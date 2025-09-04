@@ -22,47 +22,52 @@ genai.configure(api_key=api_key)
 
 st.title("📄 PDF Chatbot with Gemini + LangChain")
 
-# --- PDF Loader ---
-loader = PyPDFLoader("my_paper.pdf")
-data = loader.load()
+# --- PDF Upload ---
+uploaded_file = st.file_uploader("Upload a PDF", type="pdf")
 
-# --- Text Splitting ---
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000,
-    chunk_overlap=20
-)
-docs = text_splitter.split_documents(data)
+if uploaded_file:
+    # Save uploaded file locally
+    with open("temp.pdf", "wb") as f:
+        f.write(uploaded_file.read())
 
-# --- Embeddings + Vector Store ---
-vectorstore = Chroma.from_documents(
-    documents=docs,
-    embedding=GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-)
+    # --- PDF Loader ---
+    loader = PyPDFLoader("temp.pdf")
+    data = loader.load()
 
-retriever = vectorstore.as_retriever(search_type="similarity")
+    # --- Text Splitting ---
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=20
+    )
+    docs = text_splitter.split_documents(data)
 
-# --- LLM ---
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+    # --- Embeddings + Vector Store ---
+    vectorstore = Chroma.from_documents(
+        documents=docs,
+        embedding=GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+    )
 
-# --- Prompt Template ---
-system_output = (
-    "You are my personal assistant to help me talk with the PDF. "
-    "Use the following context to answer the question:\n\n{context}"
-)
+    retriever = vectorstore.as_retriever(search_type="similarity")
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", system_output),
-    ("human", "{input}")
-])
+    # --- LLM ---
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
-# --- RAG Chain ---
-question_answer_chain = create_stuff_documents_chain(llm, prompt)
-rag_chain = create_retrieval_chain(retriever, question_answer_chain)
+    # --- Prompt Template (fixed for Gemini) ---
+    prompt = ChatPromptTemplate.from_template(
+        "You are my personal assistant to help me talk with the PDF. "
+        "Use the following context to answer the question:\n\n{context}\n\nQuestion: {input}"
+    )
 
-# --- Chat UI ---
-query = st.chat_input("Ask me anything about the PDF:")
+    # --- RAG Chain ---
+    question_answer_chain = create_stuff_documents_chain(llm, prompt)
+    rag_chain = create_retrieval_chain(retriever, question_answer_chain)
 
-if query:
-    with st.spinner("Thinking..."):
-        response = rag_chain.invoke({"input": query})
-        st.write(response["answer"])
+    # --- Chat UI ---
+    query = st.chat_input("Ask me anything about the PDF:")
+
+    if query:
+        with st.spinner("Thinking..."):
+            response = rag_chain.invoke({"input": query})
+            st.write(response["answer"])
+else:
+    st.info("👆 Upload a PDF to get started")
