@@ -1,5 +1,9 @@
-import os
-os.environ["CHROMA_DB_IMPL"] = "duckdb"
+# --- SQLite patch for Chroma on Streamlit Cloud ---
+__import__("pysqlite3")
+import sys
+sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+# ---------------------------------------------------
+
 import streamlit as st
 import google.generativeai as genai
 from langchain_community.document_loaders import PyPDFLoader
@@ -61,4 +65,5 @@ if query:
 
 
     st.write(respones['answer'])
+
 
