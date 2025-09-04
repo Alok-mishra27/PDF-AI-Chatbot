@@ -4,66 +4,65 @@ import sys
 sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 # ---------------------------------------------------
 
+import os
 import streamlit as st
 import google.generativeai as genai
+
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_community.vectorstores import Chroma
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 
-# API Configuration
-# import os
-# from dotenv import load_dotenv
-
-# load_dotenv()
+# --- API Key ---
 api_key = st.secrets["GOOGLE_API_KEY"]
+genai.configure(api_key=api_key)
 
-# PDF Loader
-loader = PyPDFLoader('my_paper.pdf')
+st.title("📄 PDF Chatbot with Gemini + LangChain")
+
+# --- PDF Loader ---
+loader = PyPDFLoader("my_paper.pdf")
 data = loader.load()
 
-# Text Splitting
-text_splitter = RecursiveCharacterTextSplitter(chunk_size = 1000,
-                                               chunk_overlap = 20)
-doc = text_splitter.split_documents(data)
+# --- Text Splitting ---
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1000,
+    chunk_overlap=20
+)
+docs = text_splitter.split_documents(data)
 
-# Vector embedding and vercor storev
-vectorstore = Chroma.from_documents(documents = doc,
-                     embedding = GoogleGenerativeAIEmbeddings(model = "models/embedding-001"))
+# --- Embeddings + Vector Store ---
+vectorstore = Chroma.from_documents(
+    documents=docs,
+    embedding=GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+)
 
-# Retriver
-retriever = vectorstore.as_retriever(search_type = 'similarity')
+retriever = vectorstore.as_retriever(search_type="similarity")
 
-# define
+# --- LLM ---
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
-llm = ChatGoogleGenerativeAI(model = 'gemini-2.5-flash')
-
-query = st.chat_input("Ask me anything: ")
-promt = query
-
+# --- Prompt Template ---
 system_output = (
-    "You ara my personal assistant to talk with PDF"
-    "{context}"
-)
-# Make ChatPromptTemplate
-prompt = ChatPromptTemplate.from_messages(
-    [('system',system_output),
-    ("human","{input}")]
+    "You are my personal assistant to help me talk with the PDF. "
+    "Use the following context to answer the question:\n\n{context}"
 )
 
-# Create chains
+prompt = ChatPromptTemplate.from_messages([
+    ("system", system_output),
+    ("human", "{input}")
+])
+
+# --- RAG Chain ---
+question_answer_chain = create_stuff_documents_chain(llm, prompt)
+rag_chain = create_retrieval_chain(retriever, question_answer_chain)
+
+# --- Chat UI ---
+query = st.chat_input("Ask me anything about the PDF:")
 
 if query:
-    question_answer_chain = create_stuff_documents_chain(llm,prompt)
-    rag_chain = create_retrieval_chain(retriever,question_answer_chain)
-
-    respones = rag_chain.invoke({'input':query})
-
-
-    st.write(respones['answer'])
-
-
+    with st.spinner("Thinking..."):
+        response = rag_chain.invoke({"input": query})
+        st.write(response["answer"])
